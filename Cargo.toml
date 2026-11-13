@@ -15,6 +15,9 @@ zui-paint = { git = "https://github.com/zero-robotic/zero-ui", rev = "c0402d47c7
 zui-api = { git = "https://github.com/zero-robotic/zero-ui", rev = "c0402d47c7a2945d2155a27ee7d2285727a6d558" }
 zui-text = { git = "https://github.com/zero-robotic/zero-ui", rev = "c0402d47c7a2945d2155a27ee7d2285727a6d558" }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [profile.dev]
 debug = 0
 incremental = false

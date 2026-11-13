@@ -1,6 +1,7 @@
 mod app;
 mod input;
 mod palette;
+mod process;
 mod terminal;
 mod text;
 

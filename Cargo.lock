@@ -2650,6 +2650,7 @@ version = "0.1.0"
 dependencies = [
  "alacritty_terminal",
  "arboard",
+ "libc",
  "zui-api",
  "zui-app",
  "zui-input",

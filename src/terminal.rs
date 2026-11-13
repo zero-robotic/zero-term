@@ -38,6 +38,7 @@ pub struct Session {
     pub exited: bool,
     pub size: WindowSize,
     sender: EventLoopSender,
+    process: crate::process::ForegroundProcess,
     events: mpsc::Receiver<Event>,
     dirty: Arc<AtomicBool>,
 }
@@ -70,6 +71,8 @@ impl Session {
         options.env.insert("TERM".into(), "xterm-256color".into());
         options.env.insert("COLORTERM".into(), "truecolor".into());
         let pty = tty::new(&options, size, 0)?;
+        let mut process = crate::process::ForegroundProcess::new(&pty)?;
+        let title = process.poll().unwrap_or(title);
         let event_loop = EventLoop::new(term.clone(), proxy, pty, true, false)?;
         let sender = event_loop.channel();
         // Detach: Shutdown drops the event loop and PTY on its own thread, reaping the child.
@@ -80,6 +83,7 @@ impl Session {
             exited: false,
             size,
             sender,
+            process,
             events,
             dirty,
         })
@@ -115,8 +119,9 @@ impl Session {
             };
             changed = true;
             match event {
-                Event::Title(title) => self.title = title,
-                Event::ResetTitle => self.title = "Shell".into(),
+                // OSC titles often contain usernames/directories and must not replace
+                // the foreground executable name shown in the tab.
+                Event::Title(_) | Event::ResetTitle => {}
                 Event::PtyWrite(text) => self.write(text.into_bytes()),
                 Event::TextAreaSizeRequest(format) => self.write(format(self.size).into_bytes()),
                 Event::ColorRequest(index, format) => {
@@ -129,6 +134,14 @@ impl Session {
                 Event::ClipboardLoad(_, format) => self.write(format("").into_bytes()),
                 Event::Exit | Event::ChildExit(_) => self.exited = true,
                 _ => {}
+            }
+        }
+        if !self.exited {
+            if let Some(title) = self.process.poll() {
+                if title != self.title {
+                    self.title = title;
+                    changed = true;
+                }
             }
         }
         changed
@@ -144,6 +157,41 @@ impl Drop for Session {
 mod tests {
     use super::*;
     use std::time::{Duration, Instant};
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn title_tracks_foreground_job_and_returns_to_shell() {
+        let size = WindowSize {
+            num_lines: 24,
+            num_cols: 80,
+            cell_width: 9,
+            cell_height: 20,
+        };
+        let mut session = Session::new(
+            "Shell".into(),
+            size,
+            Some(tty::Shell::new(
+                "/bin/bash".into(),
+                vec!["--noprofile".into(), "--norc".into(), "-i".into()],
+            )),
+        )
+        .unwrap();
+        fn wait_for(session: &mut Session, expected: &str) {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while Instant::now() < deadline {
+                session.poll();
+                if session.title == expected {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            panic!("expected title {expected}, got {}", session.title);
+        }
+        wait_for(&mut session, "bash");
+        session.write(b"printf '\\033]0;username@host:directory\\007'; sleep 2\r".to_vec());
+        wait_for(&mut session, "sleep");
+        wait_for(&mut session, "bash");
+        session.write(b"exit\r".to_vec());
+    }
     #[test]
     fn real_pty_runs_shell_and_resizes() {
         let size = WindowSize {

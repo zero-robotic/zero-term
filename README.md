@@ -24,6 +24,7 @@ open "target/Zero Term.app"
 ## 功能
 
 - 每个 Tab 独立运行默认 Shell，拥有自己的 PTY、屏幕、选区和 10,000 行滚动历史。
+- Tab 显示当前前台进程的短名称（如 `zsh`、`vim`、`python3`），每 250ms 更新；超过 12 个字符时截短并加省略号。macOS/Linux 从 PTY 前台进程组读取，忽略 Shell 的 OSC 路径标题。
 - 点击 `+` 新建 Tab，点击标签切换，点击 `×` 关闭。关闭最后一个 Tab 时退出窗口。
 - Shell 退出后保留屏幕并标注 `done`，方便查看最后输出。
 - 窗口尺寸变化同步到所有 Tab 的网格和 PTY。
@@ -68,7 +69,7 @@ cargo run --locked -- --smoke-ms 1500
 
 测试覆盖实际 Shell 输出与 PTY resize、键盘编码、安全边界内的粘贴编码、多 Tab 状态隔离和关闭、ANSI/中文选区及绘制场景校验。PTY 测试需要 `/bin/sh`，绘制测试需要上述字体之一。窗口 smoke test 需要图形桌面与运行登录 Shell 的权限。
 
-已在 macOS 实际窗口验证新建、切换、关闭 Tab、命令粘贴执行、ANSI 颜色及中文显示。Linux/Windows 尚未进行运行验证。
+已在 macOS 实际窗口验证新建、切换、关闭 Tab、命令粘贴执行、ANSI 颜色及中文显示。Linux/Windows 尚未进行运行验证；Windows 暂未接入前台进程名查询。
 
 ## 实现与边界
 
