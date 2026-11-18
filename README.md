@@ -10,7 +10,7 @@
 cargo run --locked
 ```
 
-zero-ui 固定到 GitHub 提交 `c7ee7e1dd8b16d101e865b3f28228f52cb6f16b7`，无需旁边存在 zero-ui 源码目录。首次构建需要访问 GitHub 和 crates.io；如果 Cargo 的内置 Git 下载失败，可设置 `CARGO_NET_GIT_FETCH_WITH_CLI=true`。
+zero-ui 固定到 GitHub 提交 `1fcc39669e1f51494169bfea3af10d7e6cf845a2`，无需旁边存在 zero-ui 源码目录。首次构建需要访问 GitHub 和 crates.io；如果 Cargo 的内置 Git 下载失败，可设置 `CARGO_NET_GIT_FETCH_WITH_CLI=true`。
 
 macOS 可以生成应用包后双击启动：
 
@@ -97,3 +97,5 @@ cargo run --locked -- --smoke-ms 1500
 | Scene/Painter、输入事件和文本布局调用兼容 | 本项目核心业务迁移成本低 | 保留终端协议、字形缓存、中文双列宽度、IME 和鼠标处理 |
 
 结论：对本终端项目，业务代码小幅简化，构建配置稍有增加，核心终端复杂度不变。对表单、按钮等控件型业务，新响应式接口有望减少状态到视图的同步代码；局部刷新与任务能力也引入新的学习成本。本次没有把终端改写成响应式控件，因此不将这部分潜在收益当作已验证的结果。
+
+后续升级到 `1fcc396`：上游将 winit 升级到 `0.31.0-beta.4`，用于修复混合 DPI 显示器之间拖动窗口的问题。此次 zui 的应用、输入和绘制公共接口保持兼容，终端业务逻辑无需调整，继续使用 GPU 后端。
