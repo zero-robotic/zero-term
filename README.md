@@ -4,13 +4,13 @@
 
 ## 运行
 
-安装当前稳定版 Rust，然后执行：
+安装 Rust 1.95 或更新版本，然后执行：
 
 ```sh
 cargo run --locked
 ```
 
-zero-ui 固定到 GitHub 提交 `c0402d47c7a2945d2155a27ee7d2285727a6d558`，无需旁边存在 zero-ui 源码目录。首次构建需要访问 GitHub 和 crates.io；如果 Cargo 的内置 Git 下载失败，可设置 `CARGO_NET_GIT_FETCH_WITH_CLI=true`。
+zero-ui 固定到 GitHub 提交 `c7ee7e1dd8b16d101e865b3f28228f52cb6f16b7`，无需旁边存在 zero-ui 源码目录。首次构建需要访问 GitHub 和 crates.io；如果 Cargo 的内置 Git 下载失败，可设置 `CARGO_NET_GIT_FETCH_WITH_CLI=true`。
 
 macOS 可以生成应用包后双击启动：
 
@@ -79,6 +79,21 @@ cargo run --locked -- --smoke-ms 1500
 - `src/text.rs`：zero-ui Parley 字体与文本布局缓存。
 - `src/palette.rs`：终端颜色映射。
 
-使用 zero-ui CPU 渲染后端。UI 每 16ms 检查合并的终端更新标记，仅在内容、交互或光标状态改变时请求重绘。终端输出解析在 PTY 后台线程执行。
+使用 zero-ui GPU 渲染后端（wgpu）。UI 每 16ms 检查合并的终端更新标记，仅在内容、交互或光标状态改变时请求重绘。终端输出解析在 PTY 后台线程执行。
 
 当前版本未实现分屏、会话持久化、搜索、标签重排、图片协议、独立粗体/斜体字形和无障碍终端文本树。OSC 52 不接入系统剪贴板；复制/粘贴由用户快捷键触发。关闭 Tab 会结束该 Shell，终端历史不持久化。
+
+## zui 接口升级评估（2026-11-18）
+
+此次从 `c0402d4` 升级到远端默认分支 main 的 `c7ee7e1`。重新核查时，远端 master 仍是 2026-09-15 的 `8c75ac7`；旁边本地 zero-ui 工作目录属于另一套旧分支代码，不能代替远端 main。
+
+| 接口变化 | 对业务编码的影响 | 本项目处理 |
+| --- | --- | --- |
+| 新增 `zui_app::clipboard::NativeClipboard`，实现 `zui_api::clipboard::Clipboard` | 更简单：连接初始化、持有、失败后的重试由适配器处理；业务只调用读写方法 | 删除直接 arboard 依赖及 Option/连接错误转换链；按需连接，保留原有粘贴大小行为（`usize::MAX`） |
+| zui-app 默认 features 从 CPU 变为 GPU + CPU | 可按实际后端裁剪构建依赖 | 显式 `default-features = false`，仅开启 `gpu`、`clipboard`，运行时选择 `Backend::Gpu` |
+| 新增 `reactive::ReactiveApplication`、状态作用域及类型化事件绑定 | 普通控件业务可少写刷新标记和消息路由；需要学习 Scope、观察依赖和绑定生命周期 | 终端仍以 Alacritty 网格为状态源，保留 Scene 级 Application，避免重复维护响应式状态 |
+| `ViewApplication` 新增 `view_is_dirty`、`action`、`view_update`，支持 `ViewUpdate::Subtree` | 默认实现兼容旧代码；局部更新可减少整树重建，但手动选择子树须保证覆盖全部变化且 NodeId 有效 | 当前无 WidgetHost 控件树，不需要迁移 |
+| `Application::animate_action` 可返回完整 WindowAction | 动画回调可请求重绘、退出和唤醒，能力增加；默认桥接旧 animate | 现有终端轮询和光标闪烁继续使用 update，无需新增调度层 |
+| Scene/Painter、输入事件和文本布局调用兼容 | 本项目核心业务迁移成本低 | 保留终端协议、字形缓存、中文双列宽度、IME 和鼠标处理 |
+
+结论：对本终端项目，业务代码小幅简化，构建配置稍有增加，核心终端复杂度不变。对表单、按钮等控件型业务，新响应式接口有望减少状态到视图的同步代码；局部刷新与任务能力也引入新的学习成本。本次没有把终端改写成响应式控件，因此不将这部分潜在收益当作已验证的结果。

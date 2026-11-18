@@ -2,18 +2,18 @@
 name = "zero-term"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.95"
 
 [dependencies]
 alacritty_terminal = "0.26.0"
-zui-app = { git = "https://github.com/zero-robotic/zero-ui", rev = "c0402d47c7a2945d2155a27ee7d2285727a6d558" }
-zui-platform = { git = "https://github.com/zero-robotic/zero-ui", rev = "c0402d47c7a2945d2155a27ee7d2285727a6d558" }
-arboard = { version = "3.6", default-features = false }
+zui-app = { git = "https://github.com/zero-robotic/zero-ui", rev = "c7ee7e1dd8b16d101e865b3f28228f52cb6f16b7", default-features = false, features = ["gpu", "clipboard"] }
+zui-platform = { git = "https://github.com/zero-robotic/zero-ui", rev = "c7ee7e1dd8b16d101e865b3f28228f52cb6f16b7" }
 
-zui-types = { git = "https://github.com/zero-robotic/zero-ui", rev = "c0402d47c7a2945d2155a27ee7d2285727a6d558" }
-zui-input = { git = "https://github.com/zero-robotic/zero-ui", rev = "c0402d47c7a2945d2155a27ee7d2285727a6d558" }
-zui-paint = { git = "https://github.com/zero-robotic/zero-ui", rev = "c0402d47c7a2945d2155a27ee7d2285727a6d558" }
-zui-api = { git = "https://github.com/zero-robotic/zero-ui", rev = "c0402d47c7a2945d2155a27ee7d2285727a6d558" }
-zui-text = { git = "https://github.com/zero-robotic/zero-ui", rev = "c0402d47c7a2945d2155a27ee7d2285727a6d558" }
+zui-types = { git = "https://github.com/zero-robotic/zero-ui", rev = "c7ee7e1dd8b16d101e865b3f28228f52cb6f16b7" }
+zui-input = { git = "https://github.com/zero-robotic/zero-ui", rev = "c7ee7e1dd8b16d101e865b3f28228f52cb6f16b7" }
+zui-paint = { git = "https://github.com/zero-robotic/zero-ui", rev = "c7ee7e1dd8b16d101e865b3f28228f52cb6f16b7" }
+zui-api = { git = "https://github.com/zero-robotic/zero-ui", rev = "c7ee7e1dd8b16d101e865b3f28228f52cb6f16b7" }
+zui-text = { git = "https://github.com/zero-robotic/zero-ui", rev = "c7ee7e1dd8b16d101e865b3f28228f52cb6f16b7" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

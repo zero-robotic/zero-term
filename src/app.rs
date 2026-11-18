@@ -13,7 +13,8 @@ use alacritty_terminal::{
     vte::ansi::CursorShape,
 };
 use std::time::Duration;
-use zui_app::{Application, ApplicationError};
+use zui_api::clipboard::Clipboard;
+use zui_app::{clipboard::NativeClipboard, Application, ApplicationError};
 use zui_input::{InputEvent, Key, KeyInput, Modifiers, PointerButton, ScrollDelta};
 use zui_paint::{Painter, Path, Scene};
 use zui_platform::{ImeRequest, ImeSessionId, WindowAction, WindowEvent, WindowMetrics};
@@ -41,7 +42,7 @@ pub struct TerminalApp {
     preedit: String,
     notice: String,
     blink: bool,
-    clipboard: Option<arboard::Clipboard>,
+    clipboard: NativeClipboard,
     smoke: Option<Duration>,
 }
 impl TerminalApp {
@@ -69,7 +70,7 @@ impl TerminalApp {
             preedit: String::new(),
             notice: String::new(),
             blink: true,
-            clipboard: arboard::Clipboard::new().ok(),
+            clipboard: NativeClipboard::default(),
             smoke,
         };
         app.add_tab()?;
@@ -149,24 +150,15 @@ impl TerminalApp {
     fn copy(&mut self) {
         let text = self.tabs[self.active].term.lock().selection_to_string();
         if let Some(text) = text {
-            self.notice = match self
-                .clipboard
-                .as_mut()
-                .ok_or("Clipboard unavailable".to_string())
-                .and_then(|c| c.set_text(text).map_err(|e| e.to_string()))
-            {
+            self.notice = match self.clipboard.write_text(&text) {
                 Ok(()) => "Selection copied".into(),
-                Err(e) => e,
+                Err(e) => e.to_string(),
             };
         }
     }
     fn paste(&mut self) {
-        match self
-            .clipboard
-            .as_mut()
-            .ok_or("Clipboard unavailable".to_string())
-            .and_then(|c| c.get_text().map_err(|e| e.to_string()))
-        {
+        // Preserve the existing unrestricted paste size; zui requires an explicit limit.
+        match self.clipboard.read_text(usize::MAX) {
             Ok(text) => {
                 let bracketed = self.tabs[self.active]
                     .term
@@ -175,7 +167,7 @@ impl TerminalApp {
                     .contains(TermMode::BRACKETED_PASTE);
                 self.tabs[self.active].input(input::paste(&text, bracketed));
             }
-            Err(e) => self.notice = e,
+            Err(e) => self.notice = e.to_string(),
         }
     }
     fn keyboard(&mut self, key: KeyInput) {

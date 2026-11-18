@@ -34,7 +34,7 @@ fn main() -> Result<(), ApplicationError> {
             size: Size::new(1000.0, 680.0),
             ..Default::default()
         },
-        Backend::Cpu,
+        Backend::Gpu,
         app,
     )?;
     if smoke.is_some() {
