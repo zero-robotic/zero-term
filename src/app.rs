@@ -1,6 +1,6 @@
 use crate::{
     input,
-    palette::{self, ACCENT, BG, FG},
+    palette::{self, ACCENT, BG},
     terminal::Session,
     text::TextPainter,
 };
@@ -20,10 +20,27 @@ use zui_paint::{Painter, Path, Scene};
 use zui_platform::{ImeRequest, ImeSessionId, WindowAction, WindowEvent, WindowMetrics};
 use zui_types::{Color, Point, Rect, Size};
 
-const BAR: f64 = 42.0;
+const BAR: f64 = 50.0;
 const FOOTER: f64 = 26.0;
 const PAD: f64 = 12.0;
 const POLL: Duration = Duration::from_millis(16);
+
+// Shared geometry keeps the browser-style chrome and pointer targets aligned.
+fn rounded_rect(x: f64, y: f64, w: f64, h: f64, radius: f64) -> Path {
+    let r = radius.min(w / 2.0).min(h / 2.0);
+    let mut p = Path::new();
+    p.move_to(Point::new(x + r, y));
+    p.line_to(Point::new(x + w - r, y));
+    p.quad_to(Point::new(x + w, y), Point::new(x + w, y + r));
+    p.line_to(Point::new(x + w, y + h - r));
+    p.quad_to(Point::new(x + w, y + h), Point::new(x + w - r, y + h));
+    p.line_to(Point::new(x + r, y + h));
+    p.quad_to(Point::new(x, y + h), Point::new(x, y + h - r));
+    p.line_to(Point::new(x, y + r));
+    p.quad_to(Point::new(x, y), Point::new(x + r, y));
+    p.close();
+    p
+}
 
 pub struct TerminalApp {
     tabs: Vec<Session>,
@@ -118,7 +135,31 @@ impl TerminalApp {
         self.switch(next);
     }
     fn tab_width(&self) -> f64 {
-        ((self.viewport.width - 52.0).max(1.0) / self.tabs.len().max(1) as f64).clamp(1.0, 210.0)
+        ((self.viewport.width - 60.0).max(1.0) / self.tabs.len().max(1) as f64).clamp(1.0, 240.0)
+    }
+    fn tab_rect(&self, index: usize) -> Rect {
+        Rect::new(
+            8.0 + index as f64 * self.tab_width(),
+            6.0,
+            (self.tab_width() - 4.0).max(0.0),
+            36.0,
+        )
+    }
+    fn close_rect(&self, index: usize) -> Rect {
+        Rect::new(
+            8.0 + (index + 1) as f64 * self.tab_width() - 32.0,
+            12.0,
+            24.0,
+            24.0,
+        )
+    }
+    fn add_rect(&self) -> Rect {
+        Rect::new(
+            12.0 + self.tabs.len() as f64 * self.tab_width(),
+            8.0,
+            32.0,
+            32.0,
+        )
     }
     fn term_rect(&self) -> Rect {
         Rect::new(
@@ -286,6 +327,9 @@ impl TerminalApp {
                 self.preedit.clear();
                 self.tabs[self.active].input(text.into_bytes());
             }
+            InputEvent::PointerLeft => {
+                self.pointer = Point::new(-1.0, -1.0);
+            }
             InputEvent::PointerMoved(p) => {
                 self.pointer = p;
                 let mode = *self.tabs[self.active].term.lock().mode();
@@ -317,17 +361,18 @@ impl TerminalApp {
                 self.mouse_button = if pressed { Some(code) } else { None };
                 if self.pointer.y < BAR {
                     if pressed && button == PointerButton::Primary {
-                        let width = self.tab_width();
-                        let i = (self.pointer.x / width).floor() as usize;
-                        if i < self.tabs.len() {
-                            if width >= 64.0 && self.pointer.x > (i + 1) as f64 * width - 28.0 {
+                        if self.add_rect().contains(self.pointer) {
+                            if let Err(e) = self.add_tab() {
+                                self.notice = e.to_string();
+                            }
+                        } else if let Some(i) =
+                            (0..self.tabs.len()).find(|&i| self.tab_rect(i).contains(self.pointer))
+                        {
+                            if self.tab_width() >= 80.0 && self.close_rect(i).contains(self.pointer)
+                            {
                                 self.close(i);
                             } else {
                                 self.switch(i);
-                            }
-                        } else if self.pointer.x < width * self.tabs.len() as f64 + 48.0 {
-                            if let Err(e) = self.add_tab() {
-                                self.notice = e.to_string();
                             }
                         }
                     }
@@ -600,71 +645,105 @@ impl Application for TerminalApp {
             return Ok(());
         }
         let mut painter = scene.painter();
+        let chrome = Color::rgb(233, 228, 245);
+        let ink = Color::rgb(89, 83, 108);
+        let muted = Color::rgb(120, 111, 143);
+        painter.fill_rect(Rect::new(0.0, 0.0, self.viewport.width, BAR), chrome);
         painter.fill_rect(
-            Rect::new(0.0, 0.0, self.viewport.width, BAR),
-            Color::rgb(28, 33, 45),
+            Rect::new(0.0, BAR - 3.0, self.viewport.width, 3.0),
+            Color::rgb(244, 241, 250),
         );
         let width = self.tab_width();
         for (i, tab) in self.tabs.iter().enumerate() {
-            let x = i as f64 * width;
+            let x = 8.0 + i as f64 * width;
+            let w = (width - 4.0).max(0.0);
             if i == self.active {
-                painter.fill_rect(Rect::new(x, 0.0, width, BAR), BG);
-                painter.fill_rect(
-                    Rect::new(x + 8.0, BAR - 2.0, (width - 16.0).max(0.0), 2.0),
-                    ACCENT,
+                painter.fill(
+                    rounded_rect(x, 8.0, w, 36.0, 18.0),
+                    Color::rgb(216, 208, 231),
+                );
+                painter.fill(
+                    rounded_rect(x, 6.0, w, 36.0, 18.0),
+                    Color::rgb(250, 248, 255),
+                );
+                painter.stroke(
+                    rounded_rect(x + 0.5, 6.5, (w - 1.0).max(0.0), 35.0, 17.5),
+                    Color::rgb(202, 191, 225),
+                    1.0,
+                );
+            } else if self.tab_rect(i).contains(self.pointer) {
+                painter.fill(
+                    rounded_rect(x, 6.0, w, 36.0, 18.0),
+                    Color::rgb(241, 237, 250),
                 );
             }
-            let max_chars = ((width - 52.0) / self.text.cell_width).max(0.0) as usize;
-            let title: String = tab
-                .title
-                .chars()
-                .filter(|c| !c.is_control())
-                .take(max_chars)
-                .collect();
-            let label = if tab.exited {
-                format!("{title} · done")
-            } else {
-                title
-            };
+            let close_hovered = self.close_rect(i).contains(self.pointer);
             let mut error = None;
-            painter.with_clip(
-                Path::rectangle(Rect::new(x + 8.0, 0.0, (width - 38.0).max(0.0), BAR)),
-                |p| {
-                    if let Err(e) = self.text.paint(
-                        p,
-                        &label,
-                        x + 12.0,
-                        10.0,
-                        if i == self.active {
-                            FG
-                        } else {
-                            Color::rgb(133, 145, 165)
-                        },
-                    ) {
-                        error = Some(e);
+            painter.with_clip(Path::rectangle(self.tab_rect(i)), |p| {
+                if width >= 80.0 {
+                    let icon = if tab.exited {
+                        muted
+                    } else {
+                        Color::rgb(133, 111, 190)
+                    };
+                    p.fill(rounded_rect(x + 12.0, 16.0, 18.0, 16.0, 4.0), icon);
+                    let mut chevron = Path::new();
+                    chevron.move_to(Point::new(x + 16.0, 20.0));
+                    chevron.line_to(Point::new(x + 19.5, 24.0));
+                    chevron.line_to(Point::new(x + 16.0, 28.0));
+                    p.stroke(chevron, Color::WHITE, 1.4);
+                    p.fill_rect(Rect::new(x + 21.0, 27.0, 5.0, 1.4), Color::WHITE);
+                }
+                let left = if width >= 80.0 { 38.0 } else { 8.0 };
+                let right = if width >= 80.0 { 34.0 } else { 8.0 };
+                let max_chars = ((w - left - right) / self.text.cell_width).max(0.0) as usize;
+                let title: String = tab.title.chars().filter(|c| !c.is_control()).collect();
+                let title = if tab.exited {
+                    format!("{title} · done")
+                } else {
+                    title
+                };
+                let label = if title.chars().count() > max_chars && max_chars > 0 {
+                    format!("{}…", title.chars().take(max_chars - 1).collect::<String>())
+                } else {
+                    title.chars().take(max_chars).collect()
+                };
+                if let Err(e) = self.text.paint(p, &label, x + left, 14.0, ink) {
+                    error = Some(e);
+                }
+                if width >= 80.0 {
+                    let cx = x + width - 20.0;
+                    if close_hovered {
+                        p.fill(
+                            rounded_rect(cx - 12.0, 12.0, 24.0, 24.0, 12.0),
+                            Color::rgb(223, 215, 238),
+                        );
                     }
-                },
-            );
+                    let mut cross = Path::new();
+                    cross.move_to(Point::new(cx - 3.5, 20.5));
+                    cross.line_to(Point::new(cx + 3.5, 27.5));
+                    cross.move_to(Point::new(cx + 3.5, 20.5));
+                    cross.line_to(Point::new(cx - 3.5, 27.5));
+                    p.stroke(cross, muted, 1.5);
+                }
+            });
             if let Some(e) = error {
                 return Err(e);
             }
-            if width >= 64.0 {
-                self.text.paint(
-                    &mut painter,
-                    "×",
-                    x + width - 23.0,
-                    10.0,
-                    Color::rgb(133, 145, 165),
-                )?;
-            }
         }
-        self.text.paint(
-            &mut painter,
-            "+",
-            width * self.tabs.len() as f64 + 17.0,
-            9.0,
-            ACCENT,
-        )?;
+        let ax = 28.0 + self.tabs.len() as f64 * width;
+        if self.add_rect().contains(self.pointer) {
+            painter.fill(
+                rounded_rect(ax - 16.0, 8.0, 32.0, 32.0, 16.0),
+                Color::rgb(220, 211, 237),
+            );
+        }
+        let mut plus = Path::new();
+        plus.move_to(Point::new(ax - 5.0, 24.0));
+        plus.line_to(Point::new(ax + 5.0, 24.0));
+        plus.move_to(Point::new(ax, 19.0));
+        plus.line_to(Point::new(ax, 29.0));
+        painter.stroke(plus, muted, 1.7);
         let mut error = None;
         painter.with_clip(Path::rectangle(self.term_rect()), |p| {
             if let Err(e) = self.paint_terminal(p) {
@@ -748,6 +827,34 @@ mod tests {
                 .unwrap()
                 .exit
         );
+    }
+
+    #[test]
+    fn tab_chrome_clicks_match_visible_controls() {
+        let mut app =
+            TerminalApp::with_shell(None, Some(Shell::new("/bin/sh".into(), vec![]))).unwrap();
+        let click = |app: &mut TerminalApp, x, y| {
+            app.input(InputEvent::PointerButton {
+                button: PointerButton::Primary,
+                pressed: true,
+                position: Some(Point::new(x, y)),
+            });
+        };
+        // Empty top padding must not create or switch a tab.
+        click(&mut app, 270.0, 2.0);
+        assert_eq!(app.tabs.len(), 1);
+        click(&mut app, 268.0, 24.0);
+        assert_eq!(app.tabs.len(), 2);
+        assert_eq!(app.active, 1);
+        click(&mut app, 60.0, 24.0);
+        assert_eq!(app.active, 0);
+        click(&mut app, 228.0, 24.0);
+        assert_eq!(app.tabs.len(), 1);
+        assert_eq!(app.active, 0);
+        // Shrinking the window moves the add target with its drawing.
+        app.viewport = Size::new(180.0, 400.0);
+        click(&mut app, 148.0, 24.0);
+        assert_eq!(app.tabs.len(), 2);
     }
 
     #[test]
